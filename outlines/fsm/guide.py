@@ -1,7 +1,8 @@
 import uuid
+from abc import ABC
 from collections import namedtuple
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Protocol, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Protocol, Tuple
 
 import interegular
 from lark import Lark
@@ -21,23 +22,28 @@ StatesMapping = namedtuple("StatesMapping", ["maps", "empty", "finals", "eos"])
 
 
 @dataclass(frozen=True)
-class InstructionBase:
-    """Base class for all instructions.
+class Instruction(ABC):
+    """Abstract base class for all instructions.
 
     Attributes
     ----------
     id : uuid.UUID
         Unique identifier for the instruction.
+    tokens : Optional[List[int]]
+        The tokens that are relevant to the instruction. A value of `None`
+        indicates that all tokens are allowed or that this attribute is not
+        applicable for some instructions.
     """
 
     id: uuid.UUID = field(default_factory=uuid.uuid4, init=False)
+    tokens: Optional[List[int]]
 
     def __post_init__(self):
         object.__setattr__(self, "id", uuid.uuid4())
 
 
 @dataclass(frozen=True)
-class Write(InstructionBase):
+class Write(Instruction):
     """Write instruction.
 
     Attributes
@@ -51,7 +57,7 @@ class Write(InstructionBase):
 
 
 @dataclass(frozen=True)
-class Generate(InstructionBase):
+class Generate(Instruction):
     """Generate instruction
 
     Attributes
@@ -62,9 +68,6 @@ class Generate(InstructionBase):
     """
 
     tokens: Optional[List[int]]
-
-
-Instruction = Union[Write, Generate]
 
 
 class Guide(Protocol):
