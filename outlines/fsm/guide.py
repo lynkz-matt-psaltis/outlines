@@ -69,8 +69,6 @@ class Generate(Instruction):
 
 
 class StatesMapping:
-    cache: Dict[int, Instruction]
-
     def __init__(
         self,
         maps: Dict[int, Dict[int, int]],
@@ -82,6 +80,7 @@ class StatesMapping:
         self.empty = empty
         self.finals = finals
         self.eos = eos
+        self.cache: Dict[int, Instruction] = {}
 
     def get(self, state: int) -> Instruction:
         if state in self.cache:
