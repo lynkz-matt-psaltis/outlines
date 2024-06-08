@@ -1,3 +1,4 @@
+from collections import namedtuple
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional, Protocol, Tuple, Union
 
@@ -14,6 +15,8 @@ from outlines.fsm.regex import (
 
 if TYPE_CHECKING:
     from outlines.models.tokenizer import Tokenizer
+
+StatesMapping = namedtuple("StatesMapping", ["maps", "empty", "finals", "eos"])
 
 
 @dataclass(frozen=True)
@@ -106,9 +109,7 @@ class StopAtEOSGuide(Guide):
 
 
 @cache()
-def create_states_mapping(
-    regex_string: str, tokenizer: "Tokenizer"
-) -> Tuple[dict, set, set]:
+def create_states_mapping(regex_string: str, tokenizer: "Tokenizer") -> StatesMapping:
     """Create the variables related to the mapping between states and tokens
     The parameters of the function are used for caching purpose
     """
@@ -129,7 +130,21 @@ def create_states_mapping(
             "The vocabulary does not allow us to build a sequence that matches the input regex"
         )
 
-    return states_to_token_maps, empty_token_ids, regex_fsm.finals
+    return StatesMapping(
+        maps=states_to_token_maps,
+        empty=empty_token_ids,
+        finals=regex_fsm.finals | {-1},
+        eos=tokenizer.eos_token_id,
+    )
+
+
+@cache()
+def getByState(mapping: StatesMapping, state) -> Instruction:
+    next_tokens_to_end_states = mapping.maps.get(state)
+    if next_tokens_to_end_states is None:
+        return Write([mapping.eos])
+
+    return Generate(list(next_tokens_to_end_states.keys()))
 
 
 class RegexGuide(Guide):
@@ -138,13 +153,7 @@ class RegexGuide(Guide):
     initial_state = 0
 
     def __init__(self, regex_string: str, tokenizer):
-        (
-            self.states_to_token_maps,
-            self.empty_token_ids,
-            fsm_finals,
-        ) = create_states_mapping(regex_string, tokenizer)
-        self.eos_token_id = tokenizer.eos_token_id
-        self.final_states = fsm_finals | {-1}
+        self.stateMappings = create_states_mapping(regex_string, tokenizer)
 
     def get_next_instruction(self, state: int) -> Instruction:
         """Return the next instruction for guided generation.
@@ -169,11 +178,7 @@ class RegexGuide(Guide):
         A `Generate` instance that contains the model and the allowed token ids.
 
         """
-        next_tokens_to_end_states = self.states_to_token_maps.get(state)
-        if next_tokens_to_end_states is None:
-            return Write([self.eos_token_id])
-
-        return Generate(list(next_tokens_to_end_states.keys()))
+        return getByState(self.stateMappings, state)
 
     def get_next_state(self, state: int, token_id: int) -> int:
         """Update the state of the guide.
@@ -193,10 +198,10 @@ class RegexGuide(Guide):
         The new state of the guide.
 
         """
-        if token_id == self.eos_token_id or state not in self.states_to_token_maps:
+        if token_id == self.stateMappings.eos or state not in self.stateMappings.maps:
             return -1
 
-        last_token_to_end_state = self.states_to_token_maps[state]
+        last_token_to_end_state = self.stateMappings.maps[state]
         next_state = last_token_to_end_state.get(token_id)
         if next_state is None:
             next_state = -1
@@ -235,15 +240,16 @@ class RegexGuide(Guide):
             return states_to_token_maps, empty_token_ids
 
         (
-            from_interegular_instance.states_to_token_maps,
-            from_interegular_instance.empty_token_ids,
+            from_interegular_instance.stateMappings.maps,
+            from_interegular_instance.stateMappings.empty,
         ) = create_states_mapping_from_interegular_fsm(interegular_fsm)
-        from_interegular_instance.eos_token_id = tokenizer.eos_token_id
-        return from_interegular_instance
+        from_interegular_instance.stateMappings.eos = tokenizer.eos_token_id
+
+        return from_interegular_instance.stateMappings
 
     def is_final_state(self, state: int) -> bool:
         """Determine whether the current state of the guide is a final state."""
-        return state in self.final_states
+        return state in self.stateMappings.finals
 
     def copy(self):
         return self

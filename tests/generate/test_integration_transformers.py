@@ -663,11 +663,11 @@ def test_RegexGuide_caching(temp_cache_dir):
 
     # These two different models and tokenizers should not have the same state
     # mapping results
-    assert generator.fsm.states_to_token_maps != generator_2.fsm.states_to_token_maps
+    assert generator.fsm.stateMappings.maps != generator_2.fsm.stateMappings.maps
 
     generator_3 = generate.regex(model_2, regex, sampler=greedy())
     assert cache.stats() == (1, 2)
-    assert generator_2.fsm.states_to_token_maps == generator_3.fsm.states_to_token_maps
+    assert generator_2.fsm.stateMappings.maps == generator_3.fsm.stateMappings.maps
 
     # Just for fun...
     structured = generator(prompt, max_tokens=30)
