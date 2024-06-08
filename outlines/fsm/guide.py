@@ -144,6 +144,7 @@ def getByState(mapping: StatesMapping, state) -> Instruction:
     if next_tokens_to_end_states is None:
         return Write([mapping.eos])
 
+    print("Generating", state)
     return Generate(list(next_tokens_to_end_states.keys()))
 
 
