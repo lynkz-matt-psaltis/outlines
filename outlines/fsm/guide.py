@@ -2,7 +2,7 @@ import uuid
 from abc import ABC
 from collections import namedtuple
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Protocol, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Protocol, Set, Tuple
 
 import interegular
 from lark import Lark
@@ -17,8 +17,6 @@ from outlines.fsm.regex import (
 
 if TYPE_CHECKING:
     from outlines.models.tokenizer import Tokenizer
-
-StatesMapping = namedtuple("StatesMapping", ["maps", "empty", "finals", "eos"])
 
 
 @dataclass(frozen=True)
@@ -68,6 +66,37 @@ class Generate(Instruction):
     """
 
     tokens: Optional[List[int]]
+
+
+class StatesMapping:
+    cache: Dict[int, Instruction]
+
+    def __init__(
+        self,
+        maps: Dict[int, Dict[int, int]],
+        empty: Set[int],
+        finals: Set[int],
+        eos: int,
+    ):
+        self.maps = maps
+        self.empty = empty
+        self.finals = finals
+        self.eos = eos
+
+    def get(self, state: int) -> Instruction:
+        if state in self.cache:
+            return self.cache[state]
+
+        next_tokens_to_end_states = self.maps.get(state)
+
+        instruction: Instruction
+        if next_tokens_to_end_states is None:
+            instruction = Write([self.eos])
+        else:
+            instruction = Generate(list(next_tokens_to_end_states.keys()))
+
+        self.cache[state] = instruction
+        return instruction
 
 
 class Guide(Protocol):
@@ -157,16 +186,6 @@ def create_states_mapping(regex_string: str, tokenizer: "Tokenizer") -> StatesMa
     )
 
 
-@cache()
-def getByState(mapping: StatesMapping, state) -> Instruction:
-    next_tokens_to_end_states = mapping.maps.get(state)
-    if next_tokens_to_end_states is None:
-        return Write([mapping.eos])
-
-    print("Generating", state)
-    return Generate(list(next_tokens_to_end_states.keys()))
-
-
 class RegexGuide(Guide):
     """Guide to generate text in the language of a regular expression."""
 
@@ -198,7 +217,7 @@ class RegexGuide(Guide):
         A `Generate` instance that contains the model and the allowed token ids.
 
         """
-        return getByState(self.stateMappings, state)
+        return self.stateMappings.get(state)
 
     def get_next_state(self, state: int, token_id: int) -> int:
         """Update the state of the guide.
