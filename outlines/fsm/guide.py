@@ -1,5 +1,6 @@
+import uuid
 from collections import namedtuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, List, Optional, Protocol, Tuple, Union
 
 import interegular
@@ -20,29 +21,44 @@ StatesMapping = namedtuple("StatesMapping", ["maps", "empty", "finals", "eos"])
 
 
 @dataclass(frozen=True)
-class Write:
+class InstructionBase:
+    """Base class for all instructions.
+
+    Attributes
+    ----------
+    id : uuid.UUID
+        Unique identifier for the instruction.
+    """
+
+    id: uuid.UUID = field(default_factory=uuid.uuid4, init=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "id", uuid.uuid4())
+
+
+@dataclass(frozen=True)
+class Write(InstructionBase):
     """Write instruction.
 
     Attributes
     ----------
-    tokens
+    tokens : List[int]
         The sequence of tokens to be added to the current sequence by the
         generation process.
-
     """
 
     tokens: List[int]
 
 
 @dataclass(frozen=True)
-class Generate:
+class Generate(InstructionBase):
     """Generate instruction
 
     Attributes
     ----------
-    tokens
-        The tokens that lead to a valid completion if generated.  A value
-        of ``None`` indicates that all tokens are allowed.
+    tokens : Optional[List[int]]
+        The tokens that lead to a valid completion if generated. A value
+        of `None` indicates that all tokens are allowed.
     """
 
     tokens: Optional[List[int]]
